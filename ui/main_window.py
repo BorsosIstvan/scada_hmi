@@ -1,5 +1,5 @@
 from PySide6.QtCore import QRectF, QPointF
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QFileDialog, QMessageBox, QGraphicsItemGroup
 )
@@ -67,6 +67,26 @@ class MainWindow(QMainWindow):
         prop_action = QAction("Eigenschappen", self)
         prop_action.triggered.connect(self.show_properties)
         tools_menu.addAction(prop_action)
+
+        bewerken_menu = menu_bar.addMenu("Bewerken")
+
+        kopieer_actie = QAction("Kopieer", self)
+        shortcut_copy = QShortcut(QKeySequence("Ctrl+C"), self)
+        shortcut_copy.activated.connect(self.kopieer_geselecteerde_items)
+        kopieer_actie.triggered.connect(self.kopieer_geselecteerde_items)
+        bewerken_menu.addAction(kopieer_actie)
+
+        plak_actie = QAction("Plak", self)
+        shortcut_paste = QShortcut(QKeySequence("Ctrl+V"), self)
+        shortcut_paste.activated.connect(self.plak_items)
+        plak_actie.triggered.connect(self.plak_items)
+        bewerken_menu.addAction(plak_actie)
+
+        knip_action = QAction("Knippen", self)
+        shortcut_cut = QShortcut(QKeySequence("Ctrl+X"), self)
+        shortcut_cut.activated.connect(self.knip_geselecteerde_items)
+        knip_action.triggered.connect(self.knip_geselecteerde_items)
+        bewerken_menu.addAction(knip_action)
 
     def voeg_object_toe(self):
         item = MovableItem(0, 0, 100, 50)
@@ -196,3 +216,30 @@ class MainWindow(QMainWindow):
         item.properties = data["properties"]
         item.update_label()
         return item
+
+    def kopieer_geselecteerde_items(self):
+        self.clipboard = []
+        for item in self.canvas_view.scene().selectedItems():
+            if isinstance(item, MovableItem):
+                rect = item.rect()
+                self.clipboard.append({
+                    "x": item.x(),
+                    "y": item.y(),
+                    "w": rect.width(),
+                    "h": rect.height(),
+                    "properties": item.properties.copy()
+                })
+
+    def plak_items(self):
+        for item_data in self.clipboard:
+            new_x = item_data["x"] + 20  # Verschuif een beetje
+            new_y = item_data["y"] + 20
+            item = MovableItem(new_x, new_y, item_data["w"], item_data["h"])
+            item.properties = item_data["properties"]
+            item.update_label()
+            self.canvas_view.scene().addItem(item)
+
+    def knip_geselecteerde_items(self):
+        self.kopieer_geselecteerde_items()
+        self.verwijder_geselecteerde_objecten()
+
