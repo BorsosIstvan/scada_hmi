@@ -1,25 +1,27 @@
-from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem
 from PySide6.QtCore import QRectF
+from PySide6.QtGui import QBrush, QColor
+from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem, QGraphicsTextItem
+
 
 class MovableItem(QGraphicsRectItem):
-    def __init__(self, x=0, y=0, width=100, height=50):
-        rect = QRectF(0, 0, width, height)
-        super().__init__(rect)
-        self.setPos(x, y)
-
-        # Gebruik vlaggen van QGraphicsItem
+    def __init__(self, x=0, y=0, w=100, h=50):
+        super().__init__(x, y, w, h)
         self.setFlags(
             QGraphicsItem.ItemIsMovable |
-            QGraphicsItem.ItemIsSelectable
+            QGraphicsItem.ItemIsSelectable |
+            QGraphicsItem.ItemSendsGeometryChanges
         )
+        self.setBrush(QBrush(QColor("lightgray")))
 
-        self.properties = {
-            "label": "",
-            "vorm": "rechthoek"
+    def to_dict(self):
+        rect = self.rect()
+        return {
+            "x": rect.x(),
+            "y": rect.y(),
+            "w": rect.width(),
+            "h": rect.height(),
         }
 
-        self.label_item = QGraphicsTextItem("", self)
-        self.label_item.setPos(0, -20)
-
-    def update_label(self):
-        self.label_item.setPlainText(self.properties["label"])
+    @classmethod
+    def from_dict(cls, data):
+        return cls(data["x"], data["y"], data["w"], data["h"])

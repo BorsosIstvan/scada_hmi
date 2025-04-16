@@ -3,11 +3,13 @@ from PySide6.QtGui import QAction, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QFileDialog, QMessageBox, QGraphicsItemGroup
 )
+from PySide6.QtGui import QFont
 from graphics.canvas_view import CanvasView
 from graphics.movable_item import MovableItem
 import json
 
-from ui.properties_dialog import PropertiesDialog
+from graphics.scada_object import SCADAObject
+from ui.object_properties_dialog import ObjectPropertiesDialog
 
 
 class MainWindow(QMainWindow):
@@ -33,12 +35,8 @@ class MainWindow(QMainWindow):
         opslaan_action = QAction("Opslaan", self)
         opslaan_action.triggered.connect(self.opslaan)
 
-        opslaan_als_action = QAction("Opslaan als...", self)
-        opslaan_als_action.triggered.connect(self.opslaan_als)
-
         bestand_menu.addAction(openen_action)
         bestand_menu.addAction(opslaan_action)
-        bestand_menu.addAction(opslaan_als_action)
 
         # Gereedschap menu
         tools_menu = menu_bar.addMenu("Gereedschap")
@@ -47,39 +45,23 @@ class MainWindow(QMainWindow):
         voeg_toe_action.triggered.connect(self.voeg_object_toe)
         tools_menu.addAction(voeg_toe_action)
 
-        group_action = QAction("Groepeer", self)
-        group_action.triggered.connect(self.groepeer_geselecteerde_items)
-        tools_menu.addAction(group_action)
-
-        ungroup_action = QAction("Ontgroeperen", self)
-        ungroup_action.triggered.connect(self.ontgroepeer_geselecteerde_groep)
-        tools_menu.addAction(ungroup_action)
-
-        wissel_action = QAction("Wissel geselecteerde objecten", self)
-        wissel_action.triggered.connect(self.wissel_geselecteerde_objecten)
-        tools_menu.addAction(wissel_action)
-
-        verwijder_action = QAction("Verwijder geselecteerde objecten", self)
-        verwijder_action.setShortcut("Delete")  # optioneel sneltoets
-        verwijder_action.triggered.connect(self.verwijder_geselecteerde_objecten)
-        tools_menu.addAction(verwijder_action)
-
-        prop_action = QAction("Eigenschappen", self)
-        prop_action.triggered.connect(self.show_properties)
-        tools_menu.addAction(prop_action)
+        eigenschappen_action = QAction("Eigenschappen", self)
+        eigenschappen_action.setShortcut("Ctrl+E")
+        eigenschappen_action.triggered.connect(self.open_eigenschappen_dialoog)
+        tools_menu.addAction(eigenschappen_action)
 
         bewerken_menu = menu_bar.addMenu("Bewerken")
 
         kopieer_actie = QAction("Kopieer", self)
         shortcut_copy = QShortcut(QKeySequence("Ctrl+C"), self)
-        shortcut_copy.activated.connect(self.kopieer_geselecteerde_items)
-        kopieer_actie.triggered.connect(self.kopieer_geselecteerde_items)
+        shortcut_copy.activated.connect(self.kopieer_objecten)
+        kopieer_actie.triggered.connect(self.kopieer_objecten)
         bewerken_menu.addAction(kopieer_actie)
 
         plak_actie = QAction("Plak", self)
         shortcut_paste = QShortcut(QKeySequence("Ctrl+V"), self)
-        shortcut_paste.activated.connect(self.plak_items)
-        plak_actie.triggered.connect(self.plak_items)
+        shortcut_paste.activated.connect(self.plak_objecten)
+        plak_actie.triggered.connect(self.plak_objecten)
         bewerken_menu.addAction(plak_actie)
 
         knip_action = QAction("Knippen", self)
@@ -88,95 +70,38 @@ class MainWindow(QMainWindow):
         knip_action.triggered.connect(self.knip_geselecteerde_items)
         bewerken_menu.addAction(knip_action)
 
+        verwijder_action = QAction("Verwijder geselecteerde objecten", self)
+        verwijder_action.setShortcut("Delete")  # optioneel sneltoets
+        verwijder_action.triggered.connect(self.verwijder_geselecteerde_objecten)
+        bewerken_menu.addAction(verwijder_action)
+
     def voeg_object_toe(self):
-        item = MovableItem(0, 0, 100, 50)
+        item = SCADAObject(0, 0, 100, 50, label="Nieuwe knop", plc_tag={"plc": "PLC_1", "type": "Coil", "address": 12})
         self.canvas_view.scene().addItem(item)
 
     def opslaan(self):
-        bestandsnaam, _ = QFileDialog.getSaveFileName(self, "Opslaan", "", "JSON bestanden (*.json)")
-        if bestandsnaam:
-            self._bewaar_canvas(bestandsnaam)
+        bestand, _ = QFileDialog.getSaveFileName(self, "Bestand opslaan", "", "JSON-bestanden (*.json)")
+        if bestand:
+            data = []
+            for item in self.canvas_view.scene().items():
+                if isinstance(item, SCADAObject):
+                    data.append(item.to_dict())
+            with open(bestand, "w") as f:
+                json.dump(data, f, indent=4)
 
     def opslaan_als(self):
         self.opslaan()  # voorlopig zelfde
 
     def openen(self):
-        bestandsnaam, _ = QFileDialog.getOpenFileName(self, "Openen", "", "JSON bestanden (*.json)")
-        if bestandsnaam:
-            self._laad_canvas(bestandsnaam)
-
-    def _bewaar_canvas(self, pad):
-        items = self.canvas_view.scene().items()
-        data = []
-        for item in items:
-            if isinstance(item, MovableItem):
-                rect = item.rect()
-                pos = item.pos()
-                data.append({
-                    "x": pos.x(),
-                    "y": pos.y(),
-                    "w": rect.width(),
-                    "h": rect.height(),
-                    "properties": item.properties
-                })
-
-        with open(pad, "w") as f:
-            json.dump(data, f)
-
-    def _laad_canvas(self, pad):
-        try:
-            with open(pad, "r") as f:
+        bestand, _ = QFileDialog.getOpenFileName(self, "Bestand openen", "", "JSON-bestanden (*.json)")
+        if bestand:
+            with open(bestand, "r") as f:
                 data = json.load(f)
             self.canvas_view.scene().clear()
             for item_data in data:
-                item = MovableItem(item_data["x"], item_data["y"], item_data["w"], item_data["h"])
-                if "properties" in item_data:
-                    item.properties = item_data["properties"]
-                    item.update_label()
-                self.canvas_view.scene().addItem(item)
-        except Exception as e:
-            QMessageBox.warning(self, "Fout bij laden", str(e))
-
-    def groepeer_geselecteerde_items(self):
-        selected_items = self.canvas_view.scene().selectedItems()
-
-        if len(selected_items) < 2:
-            print("Selecteer minstens twee objecten om te groeperen.")
-            return
-
-        # Maak een nieuwe groep aan en voeg de items toe
-        group = self.canvas_view.scene().createItemGroup(selected_items)
-        group.setFlags(
-            QGraphicsItemGroup.ItemIsMovable |
-            QGraphicsItemGroup.ItemIsSelectable
-        )
-        print("Objecten gegroepeerd.")
-
-    def ontgroepeer_geselecteerde_groep(self):
-        selected_items = self.canvas_view.scene().selectedItems()
-
-        for item in selected_items:
-            if isinstance(item, QGraphicsItemGroup):
-                self.canvas_view.scene().destroyItemGroup(item)
-                print("Groep ontbonden.")
-            else:
-                print("Geen groep geselecteerd.")
-
-    def wissel_geselecteerde_objecten(self):
-        selected_items = self.canvas_view.scene().selectedItems()
-        if len(selected_items) < 2:
-            print("Selecteer minstens twee objecten om te wisselen.")
-            return
-
-        # Bewaar de originele posities
-        positions = [item.pos() for item in selected_items]
-
-        # Verschuif posities in ronde
-        for i, item in enumerate(selected_items):
-            new_pos = positions[(i + 1) % len(positions)]
-            item.setPos(new_pos)
-
-        print("Geselecteerde objecten gewisseld.")
+                if item_data.get("type") == "SCADAObject":
+                    item = SCADAObject.from_dict(item_data)
+                    self.canvas_view.scene().addItem(item)
 
     def verwijder_geselecteerde_objecten(self):
         selected_items = self.canvas_view.scene().selectedItems()
@@ -189,57 +114,63 @@ class MainWindow(QMainWindow):
 
         print(f"{len(selected_items)} object(en) verwijderd.")
 
-    def show_properties(self):
-        selected_items = self.canvas_view.scene().selectedItems()
-        if not selected_items:
-            return
-
-        for item in selected_items:
-            if hasattr(item, "properties"):
-                dialog = PropertiesDialog(item.properties)
-                if dialog.exec():
-                    item.properties = dialog.get_properties()
-                    item.update_label()
-
-    def serialize_item(item):
-        return {
-            "x": item.pos().x(),
-            "y": item.pos().y(),
-            "rect": [item.rect().x(), item.rect().y(), item.rect().width(), item.rect().height()],
-            "properties": item.properties,
-        }
-
-    def deserialize_item(data):
-        rect = QRectF(*data["rect"])
-        item = MovableItem(rect)
-        item.setPos(QPointF(data["x"], data["y"]))
-        item.properties = data["properties"]
-        item.update_label()
-        return item
-
-    def kopieer_geselecteerde_items(self):
-        self.clipboard = []
+    def kopieer_objecten(self):
+        self.gekopieerde_items = []
         for item in self.canvas_view.scene().selectedItems():
-            if isinstance(item, MovableItem):
-                rect = item.rect()
-                self.clipboard.append({
-                    "x": item.x(),
-                    "y": item.y(),
-                    "w": rect.width(),
-                    "h": rect.height(),
-                    "properties": item.properties.copy()
-                })
+            if isinstance(item, SCADAObject):
+                self.gekopieerde_items.append(item.to_dict())
 
-    def plak_items(self):
-        for item_data in self.clipboard:
-            new_x = item_data["x"] + 20  # Verschuif een beetje
-            new_y = item_data["y"] + 20
-            item = MovableItem(new_x, new_y, item_data["w"], item_data["h"])
-            item.properties = item_data["properties"]
-            item.update_label()
+    def plak_objecten(self):
+        for i, item_data in enumerate(self.gekopieerde_items):
+            # Maak het SCADA-object aan uit de opgeslagen data
+            item = SCADAObject.from_dict(item_data)
+
+            # Verplaats elk object een beetje (optioneel, afhankelijk van de positie)
+            offset = 0#10 * (i + 1)  # Zorg ervoor dat objecten niet precies overlappen
+            item.setPos(item_data["x"] + offset, item_data["y"] + offset)
+            print(item_data["x"])
+
+            # Voeg het item toe aan de scene
             self.canvas_view.scene().addItem(item)
 
     def knip_geselecteerde_items(self):
-        self.kopieer_geselecteerde_items()
+        self.kopieer_objecten()
         self.verwijder_geselecteerde_objecten()
 
+    def open_eigenschappen_dialoog(self):
+        scene = self.canvas_view.scene()
+        selected_items = scene.selectedItems()
+
+        if selected_items:
+            item = selected_items[0]  # We nemen het eerste geselecteerde item
+            if hasattr(item, 'label'):  # Optioneel: check of het een SCADAObject is
+                dialoog = ObjectPropertiesDialog(self, scada_object=item)
+                if dialoog.exec():
+                    dialoog.apply_changes()
+
+    def apply_object_properties(self, item, dialoog):
+        from PySide6.QtGui import QFont
+
+        # Label tekst
+        item.set_label(dialoog.label_input.text())
+
+        # Naam instellen
+        item.naam = dialoog.naam_input.text()
+
+        # PLC tag info
+        item.plc_tag["plc"] = dialoog.plc_input.text()
+        item.plc_tag["type"] = dialoog.plc_type_input.currentText()
+        item.plc_tag["address"] = dialoog.plc_address_input.value()
+
+        # Font instellen
+        font = QFont()
+        font.setFamily(dialoog.label_font_input.currentFont().family())
+        font.setPointSize(dialoog.label_font_size_input.value())
+        item.label_item.setFont(font)
+
+        # Font info opslaan
+        item.label_font = font.family()
+        item.label_font_size = font.pointSize()
+
+        # Label centreren
+        item._update_label_position()
