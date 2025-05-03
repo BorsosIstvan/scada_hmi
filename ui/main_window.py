@@ -1,176 +1,123 @@
-from PySide6.QtCore import QRectF, QPointF
-from PySide6.QtGui import QAction, QShortcut, QKeySequence
-from PySide6.QtWidgets import (
-    QMainWindow, QFileDialog, QMessageBox, QGraphicsItemGroup
-)
-from PySide6.QtGui import QFont
-from graphics.canvas_view import CanvasView
-from graphics.movable_item import MovableItem
-import json
+from PySide6.QtCore import QPointF
+from PySide6.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QGraphicsTextItem, QDialog
+from PySide6.QtGui import QAction, QFont, QColor
 
-from graphics.scada_object import SCADAObject
-from ui.object_properties_dialog import ObjectPropertiesDialog
+from core.canvas_object import EenvoudigeTekstDialoog, SchaalbaarTekstItem
+from project.project_data import nieuw_project, opslaan_project, openen_project
+from ui.canvas_settings_dialog import CanvasSettingsDialog
+from ui.canvas_view import CanvasView
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("SCADA HMI")
-        self.setGeometry(100, 100, 800, 600)
+        self.resize(800, 600)
 
-        self.canvas_view = CanvasView()
+        self.project_data = None
+        self.canvas_view = CanvasView(self)
         self.setCentralWidget(self.canvas_view)
 
-        self._create_menu()
+        self._create_menubalk()
 
-    def _create_menu(self):
+    def _create_menubalk(self):
         menu_bar = self.menuBar()
 
-        # Bestand menu
-        bestand_menu = menu_bar.addMenu("Bestand")
+        file_menu = menu_bar.addMenu("File")
 
-        openen_action = QAction("Openen", self)
-        openen_action.triggered.connect(self.openen)
+        actie_nieuw = QAction("Nieuw project", self)
+        actie_nieuw.triggered.connect(self.nieuw_project_aanmaken)
+        file_menu.addAction(actie_nieuw)
 
-        opslaan_action = QAction("Opslaan", self)
-        opslaan_action.triggered.connect(self.opslaan)
+        actie_open = QAction("Project openen", self)
+        actie_open.triggered.connect(self.openen_project)
+        file_menu.addAction(actie_open)
 
-        bestand_menu.addAction(openen_action)
-        bestand_menu.addAction(opslaan_action)
+        actie_opslaan = QAction("Project opslaan", self)
+        actie_opslaan.triggered.connect(self.opslaan_project)
+        file_menu.addAction(actie_opslaan)
 
-        # Gereedschap menu
+        file_menu.addSeparator()
+
+        actie_exit = QAction("Afsluiten", self)
+        actie_exit.triggered.connect(self.close)
+        file_menu.addAction(actie_exit)
+
+        instellingen_menu = menu_bar.addMenu("Instellingen")
+
+        canvas_actie = QAction("Canvas instellingen", self)
+        canvas_actie.triggered.connect(self.open_canvas_instellingen)
+        instellingen_menu.addAction(canvas_actie)
+
+        # Tools menu
         tools_menu = menu_bar.addMenu("Gereedschap")
 
-        voeg_toe_action = QAction("Voeg object toe", self)
-        voeg_toe_action.triggered.connect(self.voeg_object_toe)
-        tools_menu.addAction(voeg_toe_action)
+        add_text_action = QAction("Tekstobject toevoegen", self)
+        add_text_action.triggered.connect(self.voeg_tekstobject_toe)
+        tools_menu.addAction(add_text_action)
 
-        eigenschappen_action = QAction("Eigenschappen", self)
-        eigenschappen_action.setShortcut("Ctrl+E")
-        eigenschappen_action.triggered.connect(self.open_eigenschappen_dialoog)
-        tools_menu.addAction(eigenschappen_action)
+        toon_text = QAction("Tekstobject tonen", self)
+        toon_text.triggered.connect(self.sla_canvasobjecten_op)
+        tools_menu.addAction(toon_text)
 
-        bewerken_menu = menu_bar.addMenu("Bewerken")
+    def nieuw_project_aanmaken(self):
+        self.project_data = nieuw_project("Nieuw project")
+        self.canvas_view.setCanvasSettings(self.project_data["canvas"])
+        self.canvas_view.clear()
+        self.update_venstertitel()
+        QMessageBox.information(self, "Nieuw", "Nieuw SCADA-project gestart.")
 
-        kopieer_actie = QAction("Kopieer", self)
-        shortcut_copy = QShortcut(QKeySequence("Ctrl+C"), self)
-        shortcut_copy.activated.connect(self.kopieer_objecten)
-        kopieer_actie.triggered.connect(self.kopieer_objecten)
-        bewerken_menu.addAction(kopieer_actie)
-
-        plak_actie = QAction("Plak", self)
-        shortcut_paste = QShortcut(QKeySequence("Ctrl+V"), self)
-        shortcut_paste.activated.connect(self.plak_objecten)
-        plak_actie.triggered.connect(self.plak_objecten)
-        bewerken_menu.addAction(plak_actie)
-
-        knip_action = QAction("Knippen", self)
-        shortcut_cut = QShortcut(QKeySequence("Ctrl+X"), self)
-        shortcut_cut.activated.connect(self.knip_geselecteerde_items)
-        knip_action.triggered.connect(self.knip_geselecteerde_items)
-        bewerken_menu.addAction(knip_action)
-
-        verwijder_action = QAction("Verwijder geselecteerde objecten", self)
-        verwijder_action.setShortcut("Delete")  # optioneel sneltoets
-        verwijder_action.triggered.connect(self.verwijder_geselecteerde_objecten)
-        bewerken_menu.addAction(verwijder_action)
-
-    def voeg_object_toe(self):
-        item = SCADAObject(0, 0, 100, 50, label="Nieuwe knop", plc_tag={"plc": "PLC_1", "type": "Coil", "address": 12})
-        self.canvas_view.scene().addItem(item)
-
-    def opslaan(self):
-        bestand, _ = QFileDialog.getSaveFileName(self, "Bestand opslaan", "", "JSON-bestanden (*.json)")
+    def openen_project(self):
+        bestand, _ = QFileDialog.getOpenFileName(self, "Open project", "", "SCADA Project (*.scada)")
         if bestand:
-            data = []
-            for item in self.canvas_view.scene().items():
-                if isinstance(item, SCADAObject):
-                    data.append(item.to_dict())
-            with open(bestand, "w") as f:
-                json.dump(data, f, indent=4)
+            self.project_data = openen_project(bestand)
+            self.canvas_view.setCanvasSettings(self.project_data["canvas"])
+            self.canvas_view.clear()
+            self.update_venstertitel()
+            QMessageBox.information(self, "Geopend", f"Project geladen uit:\n{bestand}")
 
-    def opslaan_als(self):
-        self.opslaan()  # voorlopig zelfde
+    def opslaan_project(self):
+        if self.project_data:
+            bestand, _ = QFileDialog.getSaveFileName(self, "Opslaan project", "", "SCADA Project (*.scada)")
+            if bestand:
+                if not bestand.endswith(".scada"):
+                    bestand += ".scada"
+                opslaan_project(self.project_data, bestand)
+                QMessageBox.information(self, "Opgeslagen", f"Project opgeslagen als:\n{bestand}")
+        else:
+            QMessageBox.warning(self, "Geen project", "Er is nog geen project om op te slaan.")
 
-    def openen(self):
-        bestand, _ = QFileDialog.getOpenFileName(self, "Bestand openen", "", "JSON-bestanden (*.json)")
-        if bestand:
-            with open(bestand, "r") as f:
-                data = json.load(f)
-            self.canvas_view.scene().clear()
-            for item_data in data:
-                if item_data.get("type") == "SCADAObject":
-                    item = SCADAObject.from_dict(item_data)
-                    self.canvas_view.scene().addItem(item)
+    def update_venstertitel(self):
+        if self.project_data:
+            naam = self.project_data["metadata"]["naam"]
+            self.setWindowTitle(f"SCADA HMI - {naam}")
 
-    def verwijder_geselecteerde_objecten(self):
-        selected_items = self.canvas_view.scene().selectedItems()
-        if not selected_items:
-            print("Geen objecten geselecteerd om te verwijderen.")
+    def open_canvas_instellingen(self):
+        if not self.project_data:
+            QMessageBox.warning(self, "Geen project", "Open of maak eerst een project aan.")
             return
 
-        for item in selected_items:
-            self.canvas_view.scene().removeItem(item)
+        dialog = CanvasSettingsDialog(self.project_data["canvas"], self)
+        if dialog.exec():
+            nieuwe_settings = dialog.opgehaalde_settings()
+            self.project_data["canvas"] = nieuwe_settings
+            self.canvas_view.setCanvasSettings(nieuwe_settings)
+            self.update_venstertitel()  # 👈 Venstertitel updaten
 
-        print(f"{len(selected_items)} object(en) verwijderd.")
+    def voeg_tekstobject_toe(self, tekst="Hoi wereld", x=100, y=100):
+        dialoog = EenvoudigeTekstDialoog(self)
+        if dialoog.exec() == QDialog.Accepted:
+            tekst = dialoog.tekst_input.text()
+            kleur = dialoog.kleur
+            text_item = SchaalbaarTekstItem(str(tekst))
+            text_item.setPos(QPointF(x, y))
+            text_item.setFont(QFont("Arial", 16))
+            text_item.setDefaultTextColor(QColor(kleur))
 
-    def kopieer_objecten(self):
-        self.gekopieerde_items = []
-        for item in self.canvas_view.scene().selectedItems():
-            if isinstance(item, SCADAObject):
-                self.gekopieerde_items.append(item.to_dict())
 
-    def plak_objecten(self):
-        for i, item_data in enumerate(self.gekopieerde_items):
-            # Maak het SCADA-object aan uit de opgeslagen data
-            item = SCADAObject.from_dict(item_data)
+            self.canvas_view.scene.addItem(text_item)
 
-            # Verplaats elk object een beetje (optioneel, afhankelijk van de positie)
-            offset = 0#10 * (i + 1)  # Zorg ervoor dat objecten niet precies overlappen
-            item.setPos(item_data["x"] + offset, item_data["y"] + offset)
-            print(item_data["x"])
+    def sla_canvasobjecten_op(self):
+        for item in self.canvas_view.scene.items():
+            print(item.toPlainText())
 
-            # Voeg het item toe aan de scene
-            self.canvas_view.scene().addItem(item)
-
-    def knip_geselecteerde_items(self):
-        self.kopieer_objecten()
-        self.verwijder_geselecteerde_objecten()
-
-    def open_eigenschappen_dialoog(self):
-        scene = self.canvas_view.scene()
-        selected_items = scene.selectedItems()
-
-        if selected_items:
-            item = selected_items[0]  # We nemen het eerste geselecteerde item
-            if hasattr(item, 'label'):  # Optioneel: check of het een SCADAObject is
-                dialoog = ObjectPropertiesDialog(self, scada_object=item)
-                if dialoog.exec():
-                    dialoog.apply_changes()
-
-    def apply_object_properties(self, item, dialoog):
-        from PySide6.QtGui import QFont
-
-        # Label tekst
-        item.set_label(dialoog.label_input.text())
-
-        # Naam instellen
-        item.naam = dialoog.naam_input.text()
-
-        # PLC tag info
-        item.plc_tag["plc"] = dialoog.plc_input.text()
-        item.plc_tag["type"] = dialoog.plc_type_input.currentText()
-        item.plc_tag["address"] = dialoog.plc_address_input.value()
-
-        # Font instellen
-        font = QFont()
-        font.setFamily(dialoog.label_font_input.currentFont().family())
-        font.setPointSize(dialoog.label_font_size_input.value())
-        item.label_item.setFont(font)
-
-        # Font info opslaan
-        item.label_font = font.family()
-        item.label_font_size = font.pointSize()
-
-        # Label centreren
-        item._update_label_position()
