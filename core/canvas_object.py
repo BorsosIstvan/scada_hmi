@@ -1,14 +1,14 @@
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QPixmap
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QDialogButtonBox, QPushButton, QColorDialog, \
-    QGraphicsTextItem
+    QGraphicsTextItem, QGraphicsPixmapItem
 
 
 class EenvoudigeTekstDialoog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, starttekst="", parent=None):
         super().__init__(parent)
         self.setWindowTitle("Tekst invoeren")
 
-        self.tekst_input = QLineEdit("Hoi wereld")
+        self.tekst_input = QLineEdit(starttekst)
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Voer de tekst in:"))
@@ -31,6 +31,7 @@ class EenvoudigeTekstDialoog(QDialog):
         gekozen = QColorDialog.getColor(self.kleur, self, "Kies tekstkleur")
         if gekozen.isValid():
             self.kleur = gekozen
+
 
 class SchaalbaarTekstItem(QGraphicsTextItem):
     def __init__(self, tekst):
@@ -56,3 +57,32 @@ class SchaalbaarTekstItem(QGraphicsTextItem):
         nieuwe_font = QFont(huidige_font)
         nieuwe_font.setPointSize(grootte)
         self.setFont(nieuwe_font)
+
+    def mouseDoubleClickEvent(self, event):
+        dialoog = EenvoudigeTekstDialoog(self.toPlainText())
+        if dialoog.exec():
+            nieuwe_tekst = dialoog.tekst_input.text()
+            self.setPlainText(nieuwe_tekst)
+
+# SCADA BitObject klas
+
+
+class ScadaBitObject(QGraphicsPixmapItem):
+    def __init__(self, afbeelding_true: str, afbeelding_false: str, adres="Q0.0", breedte=64, hoogte=64,  parent=None):
+        super().__init__(parent)
+
+        self.afbeelding_true = QPixmap(afbeelding_true).scaled(breedte, hoogte)
+        self.afbeelding_false = QPixmap(afbeelding_false).scaled(breedte, hoogte)
+        self.adres = adres  # zoals 'Q0.0' of 'M10.1'
+        self.status = False  # beginstatus
+
+        self.setPixmap(self.afbeelding_false)  # initieel uit
+        self.setFlags(
+            QGraphicsPixmapItem.ItemIsMovable |
+            QGraphicsPixmapItem.ItemIsSelectable
+        )
+        self.setAcceptHoverEvents(True)
+
+    def set_status(self, status: bool):
+        self.status = status
+        self.setPixmap(self.afbeelding_true if self.status else self.afbeelding_false)
