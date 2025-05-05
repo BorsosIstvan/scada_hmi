@@ -1,10 +1,14 @@
 import os.path
 
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QGraphicsTextItem, QDialog
 from PySide6.QtGui import QAction, QFont, QColor
 
-from core.canvas_object import EenvoudigeTekstDialoog, SchaalbaarTekstItem, ScadaBitObject
+from core import project_context
+from core.tekst_object import EenvoudigeTekstDialoog, TekstObject, ScadaBitObject
+from core.communicatie import CommunicatieDialoog, CommunicatieInstellingen
+from core.scada_object import ScadaObject, InstellingenDialoog
+from core.variabele_object import VariabelenDialoog, Variabele, VariabelenLijst
 from project.project_data import nieuw_project, opslaan_project, openen_project
 from ui.canvas_settings_dialog import CanvasSettingsDialog
 from ui.canvas_view import CanvasView
@@ -52,6 +56,14 @@ class MainWindow(QMainWindow):
         canvas_actie.triggered.connect(self.open_canvas_instellingen)
         instellingen_menu.addAction(canvas_actie)
 
+        com_setting = QAction("Communicatie instellen", self)
+        com_setting.triggered.connect(self.open_communicatie_dialoog)
+        instellingen_menu.addAction(com_setting)
+
+        var_setting = QAction("Variabelen instellen", self)
+        var_setting.triggered.connect(self.open_variabelen_dialoog)
+        instellingen_menu.addAction(var_setting)
+
         # Tools menu
         tools_menu = menu_bar.addMenu("Gereedschap")
 
@@ -60,19 +72,23 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(add_text_action)
 
         toon_text = QAction("Tekstobject tonen", self)
-        toon_text.triggered.connect(self.sla_canvasobjecten_op)
+        toon_text.triggered.connect(self.sla_objecten_op)
         tools_menu.addAction(toon_text)
 
         add_bitobject_action = QAction("Button/Lamp toevoegen", self)
         add_bitobject_action.triggered.connect(self.voeg_bitobject_toe)
         tools_menu.addAction(add_bitobject_action)
 
+        actie_nieuw_object = QAction("Nieuw Object", self)
+        actie_nieuw_object.triggered.connect(self.voeg_object_toe)
+        tools_menu.addAction(actie_nieuw_object)
 
     def nieuw_project_aanmaken(self):
         self.project_data = nieuw_project("Nieuw project")
         self.canvas_view.setCanvasSettings(self.project_data["canvas"])
         self.canvas_view.clear()
         self.update_venstertitel()
+        project_context.variabelen_lijst = VariabelenLijst()
         # QMessageBox.information(self, "Nieuw", "Nieuw SCADA-project gestart.")
 
     def openen_project(self):
@@ -82,6 +98,7 @@ class MainWindow(QMainWindow):
             self.canvas_view.setCanvasSettings(self.project_data["canvas"])
             self.canvas_view.clear()
             self.update_venstertitel()
+            project_context.variabelen_lijst = VariabelenLijst.from_list(self.project_data.get("variabelen", []))
             QMessageBox.information(self, "Geopend", f"Project geladen uit:\n{bestand}")
 
         for obj in self.project_data.get("objecten", []):
@@ -95,7 +112,30 @@ class MainWindow(QMainWindow):
                     grootte=obj["grootte"]
                 )
 
+        for obj_data in self.project_data.get("objecten", []):
+            if obj_data["type"] == "bitobject":
+                obj = ScadaBitObject.from_dict(obj_data)
+                self.canvas_view.scene.addItem(obj)
+
+        for obj in self.project_data.get("objecten", []):
+            if obj["type"] == "scadaobject":
+                nieuw_obj = ScadaObject(
+                    tekst=obj["tekst"],
+                    pad_aan=obj["pad_aan"],
+                    pad_uit=obj["pad_uit"],
+                    adres=obj["adres"],
+                    status=obj["status"],
+                    breedte=obj["breedte"],
+                    hoogte=obj["hoogte"],
+                    variabele=obj["variabele"]
+                )
+                nieuw_obj.setPos(float(obj["x"]), float(obj["y"]))
+                nieuw_obj.setScale(obj["schaal"])
+                self.canvas_view.scene.addItem(nieuw_obj)
+
+
     def opslaan_project(self):
+        self.sla_objecten_op()
         if self.project_data:
             bestand, _ = QFileDialog.getSaveFileName(self, "Opslaan project", "", "SCADA Project (*.scada)")
             if bestand:
@@ -126,30 +166,84 @@ class MainWindow(QMainWindow):
 
     def voeg_tekstobject_toe(self, tekst="Hoi wereld", x=100, y=100, kleur="blue", lettertype="Arial", grootte=16):
 
-        text_item = SchaalbaarTekstItem(str(tekst))
+        text_item = TekstObject(str(tekst))
         text_item.setPos(QPointF(x, y))
         text_item.setFont(QFont(lettertype, grootte))
         text_item.setDefaultTextColor(QColor(kleur))
 
         self.canvas_view.scene.addItem(text_item)
 
-    def sla_canvasobjecten_op(self):
-        objecten = []
+    def sla_tekstobjecten_op(self):
+        self.project_data["objecten"] = []
+
         for item in self.canvas_view.scene.items():
-            object_data = {
-                "type": "tekst",
-                "tekst": item.toPlainText(),
-                "x": item.pos().x(),
-                "y": item.pos().y(),
-                "kleur": item.defaultTextColor().name(),
-                "lettertype": item.font().family(),
-                "grootte": item.font().pointSize()
-            }
-            objecten.append(object_data)
-            print(item.toPlainText())
-        self.project_data["objecten"] = objecten
+            if isinstance(item, TekstObject):
+                self.project_data["objecten"].append(item.to_dict())
 
     def voeg_bitobject_toe(self):
         bitobject = ScadaBitObject("graphics/lamp_on.png", "graphics/lamp_off.png", adres="Q0.0")
         bitobject.setPos(100, 100)
         self.canvas_view.scene.addItem(bitobject)
+
+    def sla_bitobjecten_op(self):
+        self.project_data["objecten"] = []
+
+        for item in self.canvas_view.scene.items():
+            if isinstance(item, ScadaBitObject):
+                self.project_data["objecten"].append(item.to_dict())
+
+    def sla_projectobjecten_op(self):
+        self.project_data["objecten"] = []
+
+        for item in self.canvas_view.scene.items():
+            if isinstance(item, TekstObject) or isinstance(item, ScadaBitObject):
+                self.project_data["objecten"].append(item.to_dict())
+
+    from core.scada_object import ScadaObject
+
+    def voeg_object_toe(self):
+        nieuw_obj = ScadaObject(
+            x=100,
+            y=100,
+            tekst="Lampje",
+            kleur="blue",
+            lettertype="Arial",
+            grootte=12,
+            pad_aan="graphics/lamp_on.png",
+            pad_uit="graphics/lamp_off.png",
+            status=False,
+            breedte=50,
+            hoogte=50,
+            adres="Q0.0"
+        )
+        self.canvas_view.scene.addItem(nieuw_obj)
+        self.project_data["objecten"].append(nieuw_obj)
+
+    def sla_objecten_op(self):
+        self.project_data["objecten"] = []
+
+        for item in self.canvas_view.scene.items():
+            if isinstance(item, ScadaObject):
+                self.project_data["objecten"].append(item.to_dict())
+        for item in self.canvas_view.scene.items():
+            if isinstance(item, TekstObject):
+                self.project_data["objecten"].append(item.to_dict())
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Delete:
+            geselecteerde_items = self.canvas_view.scene.selectedItems()
+            for item in geselecteerde_items:
+                self.canvas_view.scene.removeItem(item)
+
+    def open_communicatie_dialoog(self):
+        # instellingen_obj = CommunicatieInstellingen().to_dict()
+        instellingen_obj = self.project_data["communicatie"]
+        dialoog = CommunicatieDialoog(instellingen_obj)
+        if dialoog.exec():
+            self.project_data["communicatie"] = instellingen_obj
+            print(instellingen_obj)  # bevat beide TCP en RTU instellingen
+
+    def open_variabelen_dialoog(self):
+        dialoog = VariabelenDialoog(project_context.variabelen_lijst)
+        if dialoog.exec():
+            self.project_data["variabelen"] = project_context.variabelen_lijst.to_list()

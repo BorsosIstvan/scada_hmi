@@ -13,7 +13,7 @@ class CanvasView(QGraphicsView):
         self.raster_grootte = 20
         self.achtergrond_kleur = "#FFFFFF"
 
-        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        #  self.setDragMode(QGraphicsView.ScrollHandDrag)
 
     def setCanvasSettings(self, settings):
         grootte = settings.get("grootte", [800, 600])

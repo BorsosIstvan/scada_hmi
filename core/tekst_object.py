@@ -33,7 +33,7 @@ class EenvoudigeTekstDialoog(QDialog):
             self.kleur = gekozen
 
 
-class SchaalbaarTekstItem(QGraphicsTextItem):
+class TekstObject(QGraphicsTextItem):
     def __init__(self, tekst):
         super().__init__(tekst)
         self.setFlags(
@@ -63,12 +63,30 @@ class SchaalbaarTekstItem(QGraphicsTextItem):
         if dialoog.exec():
             nieuwe_tekst = dialoog.tekst_input.text()
             self.setPlainText(nieuwe_tekst)
+            nieuwe_kleur = dialoog.kleur
+            self.setDefaultTextColor(nieuwe_kleur)
+
+    def to_dict(self):
+        return {
+            "type": "tekst",
+            "tekst": self.toPlainText(),
+            "x": self.pos().x(),
+            "y": self.pos().y(),
+            "kleur": self.defaultTextColor().name(),
+            "lettertype": self.font().family(),
+            "grootte": self.font().pointSize()
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
 
 # SCADA BitObject klas
 
 
 class ScadaBitObject(QGraphicsPixmapItem):
-    def __init__(self, afbeelding_true: str, afbeelding_false: str, adres="Q0.0", breedte=64, hoogte=64,  parent=None):
+    def __init__(self, afbeelding_true: str, afbeelding_false: str, adres="Q0.0", breedte=64, hoogte=64, parent=None):
         super().__init__(parent)
 
         self.afbeelding_true = QPixmap(afbeelding_true).scaled(breedte, hoogte)
@@ -86,3 +104,37 @@ class ScadaBitObject(QGraphicsPixmapItem):
     def set_status(self, status: bool):
         self.status = status
         self.setPixmap(self.afbeelding_true if self.status else self.afbeelding_false)
+
+    def wheelEvent(self, event):
+        delta = event.delta()
+        factor = 1.1 if delta > 0 else 0.9  # in- of uitzoomen
+        self.setScale(self.scale() * factor)
+
+    def mousePressEvent(self, event):
+        print("Knop state is:", self.status)
+        self.set_status(not self.status)
+
+    def to_dict(self):
+        return {
+            "type": "bitobject",
+            "adres": self.adres,
+            "x": self.pos().x(),
+            "y": self.pos().y(),
+            "breedte": self.pixmap().width(),
+            "hoogte": self.pixmap().height(),
+            "plaatje_aan": self.afbeelding_true,
+            "plaatje_uit": self.afbeelding_false,
+            "status": self.status
+        }
+
+    @staticmethod
+    def from_dict(data):
+        obj = ScadaBitObject(
+            afbeelding_true=data["plaatje_aan"],
+            afbeelding_false=data["plaatje_uit"],
+            adres=data["adres"]
+        )
+        obj.setPos(float(data["x"]), float(data["y"]))
+        if "status" in data:
+            obj.set_status(data["status"])
+        return obj

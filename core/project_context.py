@@ -1,0 +1,1 @@
+variabelen_lijst = None
