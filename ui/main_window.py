@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QGraphicsTe
 from PySide6.QtGui import QAction, QFont, QColor
 
 from core import project_context
+from core.project_context import variabelen_lijst
 from core.tekst_object import EenvoudigeTekstDialoog, TekstObject, ScadaBitObject
 from core.communicatie import CommunicatieDialoog, CommunicatieInstellingen
 from core.scada_object import ScadaObject, InstellingenDialoog
@@ -71,8 +72,8 @@ class MainWindow(QMainWindow):
         add_text_action.triggered.connect(self.voeg_tekstobject_toe)
         tools_menu.addAction(add_text_action)
 
-        toon_text = QAction("Tekstobject tonen", self)
-        toon_text.triggered.connect(self.sla_objecten_op)
+        toon_text = QAction("Koppelingen tonen", self)
+        toon_text.triggered.connect(self.koppelingen)
         tools_menu.addAction(toon_text)
 
         add_bitobject_action = QAction("Button/Lamp toevoegen", self)
@@ -247,3 +248,25 @@ class MainWindow(QMainWindow):
         dialoog = VariabelenDialoog(project_context.variabelen_lijst)
         if dialoog.exec():
             self.project_data["variabelen"] = project_context.variabelen_lijst.to_list()
+
+    def koppelingen(self):
+        koppelingen = {}
+        for obj in self.project_data["objecten"]:
+            naam = obj.get("variabele", None)
+            if not naam:
+                continue
+            adres = None
+
+            # Zoek het adres dat bij de naam hoort
+            for var in project_context.variabelen_lijst:
+                if var.naam == naam:
+                    adres = var.adres
+                    break
+
+            # Voeg toe aan koppelingen als er een adres is gevonden
+            if adres:
+                if adres not in koppelingen:
+                    koppelingen[adres] = []
+                koppelingen[adres].append(obj.get("variabele"))
+
+        print(koppelingen)
