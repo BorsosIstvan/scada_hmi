@@ -1,3 +1,6 @@
+from functools import partial
+
+
 class Variabele:
     def __init__(self, naam, var_type, adres, beschrijving=""):
         self.naam = naam  # Unieke naam van de variabele
@@ -27,7 +30,7 @@ class Variabele:
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLineEdit, QLabel, QComboBox, QDialogButtonBox, QMessageBox
+    QPushButton, QLineEdit, QLabel, QComboBox, QDialogButtonBox, QMessageBox, QWidget
 )
 
 
@@ -40,8 +43,8 @@ class VariabelenDialoog(QDialog):
 
         self.layout = QVBoxLayout(self)
 
-        self.tabel = QTableWidget(0, 4)
-        self.tabel.setHorizontalHeaderLabels(["Naam", "Type", "Adres", "Beschrijving"])
+        self.tabel = QTableWidget(0, 5)
+        self.tabel.setHorizontalHeaderLabels(["Naam", "Type", "Adres", "Beschrijving", "Verwijder"])
         self.layout.addWidget(self.tabel)
 
         knoppen_layout = QHBoxLayout()
@@ -58,6 +61,8 @@ class VariabelenDialoog(QDialog):
         self.buttons.rejected.connect(self.accept)
         self.layout.addWidget(self.buttons)
 
+        self.tabel.itemChanged.connect(self.verwerk_bewerking)
+
         self.laad_tabel()
 
     def laad_tabel(self):
@@ -69,9 +74,19 @@ class VariabelenDialoog(QDialog):
         row = self.tabel.rowCount()
         self.tabel.insertRow(row)
         self.tabel.setItem(row, 0, QTableWidgetItem(var.naam))
-        self.tabel.setItem(row, 1, QTableWidgetItem(var.var_type))
+        # self.tabel.setItem(row, 1, QTableWidgetItem(var.var_type))
+        combo = QComboBox()
+        combo.addItems(["bit", "int", "float", "string"])
+        combo.setCurrentText(var.var_type)
+        combo.currentTextChanged.connect(lambda text, r=row: self.type_gewijzigd(r, text))
+        self.tabel.setCellWidget(row, 1, combo)
         self.tabel.setItem(row, 2, QTableWidgetItem(var.adres))
         self.tabel.setItem(row, 3, QTableWidgetItem(var.beschrijving))
+
+        # Maak verwijderknop
+        verwijder_knop = QPushButton("X")
+        verwijder_knop.clicked.connect(partial(self.verwijder_variabele, row))
+        self.tabel.setCellWidget(row, 4, verwijder_knop)
 
     def voeg_toe(self):
         dialoog = VariabeleBewerkenDialoog()
@@ -95,6 +110,39 @@ class VariabelenDialoog(QDialog):
             self.tabel.setItem(row, 1, QTableWidgetItem(nieuwe.var_type))
             self.tabel.setItem(row, 2, QTableWidgetItem(nieuwe.adres))
             self.tabel.setItem(row, 3, QTableWidgetItem(nieuwe.beschrijving))
+
+    def verwijder_variabele(self, row):
+        confirm = QMessageBox.question(
+            self, "Bevestigen", "Weet je zeker dat je deze variabele wilt verwijderen?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            del self.variabelen_lijst[row]
+            self.tabel.removeRow(row)
+
+    def verwerk_bewerking(self, item):
+        row = item.row()
+        col = item.column()
+
+        if row < 0 or row >= len(self.variabelen_lijst):
+            return  # Veiligheidscheck
+
+        waarde = item.text()
+        variabele = self.variabelen_lijst[row]
+
+        if col == 0:
+            variabele.naam = waarde
+        elif col == 1:
+            variabele.var_type = waarde
+        elif col == 2:
+            variabele.adres = waarde
+        elif col == 3:
+            variabele.beschrijving = waarde
+
+    def type_gewijzigd(self, row, nieuwe_type):
+        if row < 0 or row >= len(self.variabelen_lijst):
+            return
+        self.variabelen_lijst[row].var_type = nieuwe_type
 
 
 class VariabeleBewerkenDialoog(QDialog):
