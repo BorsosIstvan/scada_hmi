@@ -75,7 +75,7 @@ class ScadaObject(QGraphicsItemGroup):
             "hoogte": self.hoogte,
             "adres": self.adres,
             "schaal": self.scale(),
-            "variabele": self.variabele.naam
+            "variabele": self.variabele.naam if hasattr(self.variabele, "naam") else self.variabele
         }
 
     @classmethod

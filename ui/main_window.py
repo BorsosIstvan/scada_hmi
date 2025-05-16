@@ -5,11 +5,13 @@ from PySide6.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QGraphicsTe
 from PySide6.QtGui import QAction, QFont, QColor
 
 from core import project_context
+from core.object_tabel_dialoog import ObjectTabelDialoog
 from core.project_context import variabelen_lijst
 from core.tekst_object import EenvoudigeTekstDialoog, TekstObject, ScadaBitObject
 from core.communicatie import CommunicatieDialoog, CommunicatieInstellingen
 from core.scada_object import ScadaObject, InstellingenDialoog
 from core.variabele_object import VariabelenDialoog, Variabele, VariabelenLijst
+from core.variable_object import VariabeleBewerkenDialoog
 from project.project_data import nieuw_project, opslaan_project, openen_project
 from ui.canvas_settings_dialog import CanvasSettingsDialog
 from ui.canvas_view import CanvasView
@@ -62,7 +64,7 @@ class MainWindow(QMainWindow):
         instellingen_menu.addAction(com_setting)
 
         var_setting = QAction("Variabelen instellen", self)
-        var_setting.triggered.connect(self.open_variabelen_dialoog)
+        var_setting.triggered.connect(self.open_object_tabel_dialoog)
         instellingen_menu.addAction(var_setting)
 
         # Tools menu
@@ -133,7 +135,6 @@ class MainWindow(QMainWindow):
                 nieuw_obj.setPos(float(obj["x"]), float(obj["y"]))
                 nieuw_obj.setScale(obj["schaal"])
                 self.canvas_view.scene.addItem(nieuw_obj)
-
 
     def opslaan_project(self):
         self.sla_objecten_op()
@@ -248,6 +249,25 @@ class MainWindow(QMainWindow):
         dialoog = VariabelenDialoog(project_context.variabelen_lijst)
         if dialoog.exec():
             self.project_data["variabelen"] = project_context.variabelen_lijst.to_list()
+
+    def open_variabele_bewerken_dialoog(self):
+        dialoog = VariabeleBewerkenDialoog()
+        if dialoog.exec():
+            self.project_data["variabelen"] = project_context.variabelen_lijst.to_list()
+
+    def open_object_tabel_dialoog(self):
+        var = project_context.variabelen_lijst
+        print(var)
+        kolommen = ["naam", "type", "adres", "beschrijving"]
+        dropdowns = {
+            "type": ["BOOL", "INT", "REAL"],
+            "adres": ["%IX0.0", "%IX0.1","%IX0.2","%IX0.3","%QX0.0","%QX0.1"]
+        }
+        dialoog = ObjectTabelDialoog(var, kolommen, "variabelen beheren", dropdowns, object_klasse=Variabele)
+        if dialoog.exec():
+            print(var)
+            self.project_data["variabelen"] = project_context.variabelen_lijst.to_list()
+            print(self.project_data["variabelen"])
 
     def koppelingen(self):
         koppelingen = {}
