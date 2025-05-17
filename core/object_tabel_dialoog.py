@@ -2,11 +2,35 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox
 )
-from PySide6.QtCore import Qt
 
 
 class ObjectTabelDialoog(QDialog):
+    """
+        Een dialoogvenster met een bewerkbare tabel voor objectgegevens.
+
+        Deze klasse biedt een dynamische tabel waar gebruikers rijen kunnen toevoegen,
+        verwijderen, verplaatsen en opslaan. Kolommen kunnen gewone tekstvelden of
+        dropdownmenu's bevatten. De uiteindelijke gegevens worden opgeslagen in
+        een lijst van woordenboeken of objecten (via from_dict()).
+
+        Attributes:
+            kolomnamen (List[str]): Namen van de kolommen.
+            aantal_kolommen (int): Aantal kolommen.
+            data_lijst (List[dict|object]): De data die wordt weergegeven en bewerkt.
+            dropdown_kolommen (dict): Mapping van kolomnamen naar dropdown-opties.
+            object_klasse (type): Klasse met een from_dict()-methode (optioneel).
+            table (QTableWidget): De weergegeven tabel.
+        """
     def __init__(self, lijst, kolommen, titel="Gegevens Bewerken", dropdown_kolommen=None, object_klasse=None):
+        """
+            Initialiseert de ObjectTabelDialoog
+            Args:
+                lijst (list): Lijst van objecten of dicts die als rijen worden weergegeven.
+                kolommen (list): Lijst van kolomnamen.
+                titel (str, optional): Titel van het dialoogvenster. Default is "Gegevens Bewerken".
+                dropdown_kolommen (dict, optional): Dict met kolomnamen als keys en lijsten van opties als values.
+                object_klasse (type, optional): Klasse die een from_dict(dict) methode ondersteunt.
+        """
         super().__init__()
         self.setWindowTitle(titel)
         self.resize(900, 400)
@@ -26,11 +50,11 @@ class ObjectTabelDialoog(QDialog):
         layout.addWidget(self.table)
 
         knop_layout = QHBoxLayout()
-        self.add_button = QPushButton("+")
-        self.remove_button = QPushButton("−")
+        self.add_button = QPushButton("➕")
+        self.remove_button = QPushButton("➖")
         self.up_button = QPushButton("⬆")
         self.down_button = QPushButton("⬇")
-        self.save_button = QPushButton("Opslaan")
+        self.save_button = QPushButton("💾")
         for knop in [self.add_button, self.remove_button, self.up_button, self.down_button, self.save_button]:
             knop_layout.addWidget(knop)
         knop_layout.addStretch()
@@ -111,6 +135,14 @@ class ObjectTabelDialoog(QDialog):
                 self.table.setItem(rij2, kolom, QTableWidgetItem(t1))
 
     def opslaan(self):
+        """
+        Leest de waarden uit de tabel en slaat ze op in `data_lijst`.
+
+        Als `object_klasse` is opgegeven, worden de rijen geconverteerd naar objecten
+        via de from_dict() methode. Anders blijven het dicts.
+
+        Daarna wordt de dialoog gesloten met accept().
+        """
         self.data_lijst.clear()
         for rij in range(self.table.rowCount()):
             waarden = {}

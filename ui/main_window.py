@@ -7,6 +7,7 @@ from PySide6.QtGui import QAction, QFont, QColor
 from core import project_context
 from core.object_tabel_dialoog import ObjectTabelDialoog
 from core.project_context import variabelen_lijst
+from core.scada_image_object import ScadaImageObject
 from core.tekst_object import EenvoudigeTekstDialoog, TekstObject, ScadaBitObject
 from core.communicatie import CommunicatieDialoog, CommunicatieInstellingen
 from core.scada_object import ScadaObject, InstellingenDialoog
@@ -79,7 +80,7 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(toon_text)
 
         add_bitobject_action = QAction("Button/Lamp toevoegen", self)
-        add_bitobject_action.triggered.connect(self.voeg_bitobject_toe)
+        add_bitobject_action.triggered.connect(self.voeg_scada_image_object_toe)
         tools_menu.addAction(add_bitobject_action)
 
         actie_nieuw_object = QAction("Nieuw Object", self)
@@ -116,8 +117,8 @@ class MainWindow(QMainWindow):
                 )
 
         for obj_data in self.project_data.get("objecten", []):
-            if obj_data["type"] == "bitobject":
-                obj = ScadaBitObject.from_dict(obj_data)
+            if obj_data["type"] == "scadaimageobject":
+                obj = ScadaImageObject.from_dict(obj_data)
                 self.canvas_view.scene.addItem(obj)
 
         for obj in self.project_data.get("objecten", []):
@@ -194,11 +195,30 @@ class MainWindow(QMainWindow):
             if isinstance(item, ScadaBitObject):
                 self.project_data["objecten"].append(item.to_dict())
 
+    def voeg_scada_image_object_toe(self):
+        siobject = ScadaImageObject(
+            x=100,
+            y=100,
+            pad_aan="graphics/lamp_on.png",
+            pad_uit="graphics/lamp_off.png",
+            status=False,
+        )
+        siobject.setPos(100,100)
+        self.canvas_view.scene.addItem(siobject)
+
+    def sla_scada_image_object_op(self):
+        self.project_data["objecten"] = []
+
+        for item in self.canvas_view.scene.items():
+            if isinstance(item, ScadaImageObject):
+                self.project_data["objecten"].append(item.to_dict())
+
+
     def sla_projectobjecten_op(self):
         self.project_data["objecten"] = []
 
         for item in self.canvas_view.scene.items():
-            if isinstance(item, TekstObject) or isinstance(item, ScadaBitObject):
+            if isinstance(item, TekstObject) or isinstance(item, ScadaImageObject):
                 self.project_data["objecten"].append(item.to_dict())
 
     from core.scada_object import ScadaObject
@@ -230,6 +250,9 @@ class MainWindow(QMainWindow):
         for item in self.canvas_view.scene.items():
             if isinstance(item, TekstObject):
                 self.project_data["objecten"].append(item.to_dict())
+        for item in self.canvas_view.scene.items():
+            if isinstance(item, ScadaImageObject):
+                self.project_data["objecten"].append(item.to_dict())
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete:
@@ -258,10 +281,10 @@ class MainWindow(QMainWindow):
     def open_object_tabel_dialoog(self):
         var = project_context.variabelen_lijst
         print(var)
-        kolommen = ["naam", "type", "adres", "beschrijving"]
+        kolommen = ["naam", "type", "adres", "waarde", "beschrijving"]
         dropdowns = {
             "type": ["BOOL", "INT", "REAL"],
-            "adres": ["%IX0.0", "%IX0.1","%IX0.2","%IX0.3","%QX0.0","%QX0.1"]
+            "adres": ["%IX0.0", "%IX0.1","%IX0.2","%IX0.3","%QX0.0","%QX0.1","%IW0", "%QW0"]
         }
         dialoog = ObjectTabelDialoog(var, kolommen, "variabelen beheren", dropdowns, object_klasse=Variabele)
         if dialoog.exec():
