@@ -90,6 +90,13 @@ class ScadaImageObject(QGraphicsItemGroup):
         # Wissel status bij klikken
         self.set_status(not self.status)
 
+    def update_runtime(self):
+        for var in project_context.variabelen_lijst:
+            if var.naam == self.variabele:
+                self.status = bool(int(var.waarde))
+                print(self.status)
+                self.set_status(self.status)
+
 
 #   Instellingen dialoog klasse:
 

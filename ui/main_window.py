@@ -1,15 +1,18 @@
 import os.path
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, Qt, QTimer
 from PySide6.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QGraphicsTextItem, QDialog
 from PySide6.QtGui import QAction, QFont, QColor
 
-from core import project_context
+from core import project_context, scada_display_object, communicatie
 from core.object_tabel_dialoog import ObjectTabelDialoog
 from core.project_context import variabelen_lijst
+from core.scada_display_object import DisplayObject
 from core.scada_image_object import ScadaImageObject
-from core.tekst_object import EenvoudigeTekstDialoog, TekstObject, ScadaBitObject
-from core.communicatie import CommunicatieDialoog, CommunicatieInstellingen
+from core.scada_meter_object import ScadaMeterObject
+from core.scada_slider_object import ScadaSliderObject
+from core.tekst_object import EenvoudigeTekstDialoog, TekstObject
+from core.communicatie import CommunicatieDialoog, CommunicatieInstellingen, CommunicatieManager
 from core.scada_object import ScadaObject, InstellingenDialoog
 from core.variabele_object import VariabelenDialoog, Variabele, VariabelenLijst
 from core.variable_object import VariabeleBewerkenDialoog
@@ -30,6 +33,11 @@ class MainWindow(QMainWindow):
 
         self._create_menubalk()
         self.nieuw_project_aanmaken()
+
+        self.runtime_timer = QTimer(self)
+        self.runtime_timer.timeout.connect(self.update_canvas_runtime)
+
+        self.comm_manager = CommunicatieManager(project_context.instellingen)
 
     def _create_menubalk(self):
         menu_bar = self.menuBar()
@@ -75,17 +83,33 @@ class MainWindow(QMainWindow):
         add_text_action.triggered.connect(self.voeg_tekstobject_toe)
         tools_menu.addAction(add_text_action)
 
-        toon_text = QAction("Koppelingen tonen", self)
-        toon_text.triggered.connect(self.koppelingen)
-        tools_menu.addAction(toon_text)
+        # toon_text = QAction("Koppelingen tonen", self)
+        # toon_text.triggered.connect(self.koppelingen)
+        # tools_menu.addAction(toon_text)
 
         add_bitobject_action = QAction("Button/Lamp toevoegen", self)
         add_bitobject_action.triggered.connect(self.voeg_scada_image_object_toe)
         tools_menu.addAction(add_bitobject_action)
 
-        actie_nieuw_object = QAction("Nieuw Object", self)
-        actie_nieuw_object.triggered.connect(self.voeg_object_toe)
-        tools_menu.addAction(actie_nieuw_object)
+        actie_meter_object = QAction("Meter/Weergave toevoegen", self)
+        actie_meter_object.triggered.connect(self.voeg_meter_object_toe)
+        tools_menu.addAction(actie_meter_object)
+
+        actie_slider_object = QAction("Slider toevoegen", self)
+        actie_slider_object.triggered.connect(self.voeg_slider_object_toe)
+        tools_menu.addAction(actie_slider_object)
+
+        actie_display_object = QAction("Display toevoegen", self)
+        actie_display_object.triggered.connect(self.voeg_display_object_toe)
+        tools_menu.addAction(actie_display_object)
+
+        # actie_nieuw_object = QAction("Nieuw Object", self)
+        # actie_nieuw_object.triggered.connect(self.voeg_object_toe)
+        # tools_menu.addAction(actie_nieuw_object)
+
+        actie_running = QAction("Running", self)
+        actie_running.triggered.connect(self.running)
+        tools_menu.addAction(actie_running)
 
     def nieuw_project_aanmaken(self):
         self.project_data = nieuw_project("Nieuw project")
@@ -93,6 +117,7 @@ class MainWindow(QMainWindow):
         self.canvas_view.clear()
         self.update_venstertitel()
         project_context.variabelen_lijst = VariabelenLijst()
+        project_context.instellingen = self.project_data.get("communicatie")
         # QMessageBox.information(self, "Nieuw", "Nieuw SCADA-project gestart.")
 
     def openen_project(self):
@@ -103,7 +128,8 @@ class MainWindow(QMainWindow):
             self.canvas_view.clear()
             self.update_venstertitel()
             project_context.variabelen_lijst = VariabelenLijst.from_list(self.project_data.get("variabelen", []))
-            QMessageBox.information(self, "Geopend", f"Project geladen uit:\n{bestand}")
+            #QMessageBox.information(self, "Geopend", f"Project geladen uit:\n{bestand}")
+            project_context.instellingen = self.project_data.get("communicatie")
 
         for obj in self.project_data.get("objecten", []):
             if obj["type"] == "tekst":
@@ -119,6 +145,17 @@ class MainWindow(QMainWindow):
         for obj_data in self.project_data.get("objecten", []):
             if obj_data["type"] == "scadaimageobject":
                 obj = ScadaImageObject.from_dict(obj_data)
+                self.canvas_view.scene.addItem(obj)
+
+        for obj_data in self.project_data.get("objecten", []):
+            if obj_data["type"] == "scadaslider":
+                obj = ScadaSliderObject.from_dict(obj_data)
+                self.canvas_view.scene.addItem(obj)
+            if obj_data["type"] == "displayobject":
+                obj = DisplayObject.from_dict(obj_data)
+                self.canvas_view.scene.addItem(obj)
+            if obj_data["type"] == "scadameter":
+                obj = ScadaMeterObject.from_dict(obj_data)
                 self.canvas_view.scene.addItem(obj)
 
         for obj in self.project_data.get("objecten", []):
@@ -183,27 +220,17 @@ class MainWindow(QMainWindow):
             if isinstance(item, TekstObject):
                 self.project_data["objecten"].append(item.to_dict())
 
-    def voeg_bitobject_toe(self):
-        bitobject = ScadaBitObject("graphics/lamp_on.png", "graphics/lamp_off.png", adres="Q0.0")
-        bitobject.setPos(100, 100)
-        self.canvas_view.scene.addItem(bitobject)
-
-    def sla_bitobjecten_op(self):
-        self.project_data["objecten"] = []
-
-        for item in self.canvas_view.scene.items():
-            if isinstance(item, ScadaBitObject):
-                self.project_data["objecten"].append(item.to_dict())
-
     def voeg_scada_image_object_toe(self):
         siobject = ScadaImageObject(
             x=100,
             y=100,
             pad_aan="graphics/lamp_on.png",
             pad_uit="graphics/lamp_off.png",
-            status=False,
+            breedte=50,
+            hoogte=50,
+            status=False
         )
-        siobject.setPos(100,100)
+        siobject.setPos(100, 100)
         self.canvas_view.scene.addItem(siobject)
 
     def sla_scada_image_object_op(self):
@@ -213,6 +240,40 @@ class MainWindow(QMainWindow):
             if isinstance(item, ScadaImageObject):
                 self.project_data["objecten"].append(item.to_dict())
 
+    def voeg_meter_object_toe(self):
+        meterobject = ScadaMeterObject(
+            x=100, y=100, breedte=50, hoogte=50
+        )
+        meterobject.update_from_var(50)
+        self.canvas_view.scene.addItem(meterobject)
+
+    def voeg_slider_object_toe(self):
+        sliderobject = ScadaSliderObject(
+            x=100, y=100, breedte=50, hoogte=50
+        )
+        self.canvas_view.scene.addItem(sliderobject)
+
+    def voeg_display_object_toe(self):
+        displayobject = DisplayObject(
+            x=100, y=100
+        )
+        self.canvas_view.scene.addItem(displayobject)
+
+    def running(self):
+        if not project_context.running:
+            project_context.running = True
+            self.comm_manager.start()
+            self.runtime_timer.start(100)  # elke 100 ms updaten
+        else:
+            project_context.running = False
+            self.comm_manager.stop()
+            self.runtime_timer.stop()
+        print(project_context.running)
+
+    def update_all_objects(self):
+        for item in self.canvas_view.items():
+            if isinstance(item, DisplayObject):
+                item.update_display()
 
     def sla_projectobjecten_op(self):
         self.project_data["objecten"] = []
@@ -245,7 +306,7 @@ class MainWindow(QMainWindow):
         self.project_data["objecten"] = []
 
         for item in self.canvas_view.scene.items():
-            if isinstance(item, ScadaObject):
+            if isinstance(item, DisplayObject | ScadaMeterObject | ScadaSliderObject):
                 self.project_data["objecten"].append(item.to_dict())
         for item in self.canvas_view.scene.items():
             if isinstance(item, TekstObject):
@@ -266,7 +327,7 @@ class MainWindow(QMainWindow):
         dialoog = CommunicatieDialoog(instellingen_obj)
         if dialoog.exec():
             self.project_data["communicatie"] = instellingen_obj
-            print(instellingen_obj)  # bevat beide TCP en RTU instellingen
+            project_context.instellingen = instellingen_obj
 
     def open_variabelen_dialoog(self):
         dialoog = VariabelenDialoog(project_context.variabelen_lijst)
@@ -283,8 +344,8 @@ class MainWindow(QMainWindow):
         print(var)
         kolommen = ["naam", "type", "adres", "waarde", "beschrijving"]
         dropdowns = {
-            "type": ["BOOL", "INT", "REAL"],
-            "adres": ["%IX0.0", "%IX0.1","%IX0.2","%IX0.3","%QX0.0","%QX0.1","%IW0", "%QW0"]
+            "type": ["coil", "discrete_input", "holding_register", "input_register"],
+            "adres": ["0", "1", "2", "3", "4", "5", "6", "7"]
         }
         dialoog = ObjectTabelDialoog(var, kolommen, "variabelen beheren", dropdowns, object_klasse=Variabele)
         if dialoog.exec():
@@ -313,3 +374,27 @@ class MainWindow(QMainWindow):
                 koppelingen[adres].append(obj.get("variabele"))
 
         print(koppelingen)
+
+    def update_canvas_runtime(self):
+        self.update_modbus()
+        for item in self.canvas_view.scene.items():
+            if hasattr(item, "update_runtime"):
+                item.update_runtime()
+            if hasattr(item, "update_status"):
+                item.update_status()
+
+    def update_modbus(self):
+        if self.comm_manager.running:
+            for var in project_context.variabelen_lijst:
+
+                try:
+                    response = self.comm_manager.lees_register(int(var.adres))
+                    if response.isError():
+                        print(f"Fout bij lezen van {var.naam} (adres {var.adres}): {response}")
+                        var.waarde = None
+                    else:
+                        var.waarde = response.registers[0]
+                except Exception as e:
+                    print(f"Exceptie bij {var.naam}: {e}")
+                    var.waarde = None
+
