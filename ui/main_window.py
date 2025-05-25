@@ -128,7 +128,7 @@ class MainWindow(QMainWindow):
             self.canvas_view.clear()
             self.update_venstertitel()
             project_context.variabelen_lijst = VariabelenLijst.from_list(self.project_data.get("variabelen", []))
-            #QMessageBox.information(self, "Geopend", f"Project geladen uit:\n{bestand}")
+            # QMessageBox.information(self, "Geopend", f"Project geladen uit:\n{bestand}")
             project_context.instellingen = self.project_data.get("communicatie")
 
         for obj in self.project_data.get("objecten", []):
@@ -329,19 +329,8 @@ class MainWindow(QMainWindow):
             self.project_data["communicatie"] = instellingen_obj
             project_context.instellingen = instellingen_obj
 
-    def open_variabelen_dialoog(self):
-        dialoog = VariabelenDialoog(project_context.variabelen_lijst)
-        if dialoog.exec():
-            self.project_data["variabelen"] = project_context.variabelen_lijst.to_list()
-
-    def open_variabele_bewerken_dialoog(self):
-        dialoog = VariabeleBewerkenDialoog()
-        if dialoog.exec():
-            self.project_data["variabelen"] = project_context.variabelen_lijst.to_list()
-
     def open_object_tabel_dialoog(self):
         var = project_context.variabelen_lijst
-        print(var)
         kolommen = ["naam", "type", "adres", "waarde", "beschrijving"]
         dropdowns = {
             "type": ["coil", "discrete_input", "holding_register", "input_register"],
@@ -349,31 +338,7 @@ class MainWindow(QMainWindow):
         }
         dialoog = ObjectTabelDialoog(var, kolommen, "variabelen beheren", dropdowns, object_klasse=Variabele)
         if dialoog.exec():
-            print(var)
             self.project_data["variabelen"] = project_context.variabelen_lijst.to_list()
-            print(self.project_data["variabelen"])
-
-    def koppelingen(self):
-        koppelingen = {}
-        for obj in self.project_data["objecten"]:
-            naam = obj.get("variabele", None)
-            if not naam:
-                continue
-            adres = None
-
-            # Zoek het adres dat bij de naam hoort
-            for var in project_context.variabelen_lijst:
-                if var.naam == naam:
-                    adres = var.adres
-                    break
-
-            # Voeg toe aan koppelingen als er een adres is gevonden
-            if adres:
-                if adres not in koppelingen:
-                    koppelingen[adres] = []
-                koppelingen[adres].append(obj.get("variabele"))
-
-        print(koppelingen)
 
     def update_canvas_runtime(self):
         self.update_modbus()
@@ -386,15 +351,47 @@ class MainWindow(QMainWindow):
     def update_modbus(self):
         if self.comm_manager.running:
             for var in project_context.variabelen_lijst:
-
-                try:
-                    response = self.comm_manager.lees_register(int(var.adres))
-                    if response.isError():
-                        print(f"Fout bij lezen van {var.naam} (adres {var.adres}): {response}")
+                if var.type == "holding_register":
+                    try:
+                        response = self.comm_manager.lees_holding_register(int(var.adres))
+                        if response.isError():
+                            print(f"Fout bij lezen van {var.naam} (adres {var.adres}): {response}")
+                            var.waarde = None
+                        else:
+                            var.waarde = response.registers[0]
+                    except Exception as e:
+                        print(f"Exceptie bij {var.naam}: {e}")
                         var.waarde = None
-                    else:
-                        var.waarde = response.registers[0]
-                except Exception as e:
-                    print(f"Exceptie bij {var.naam}: {e}")
-                    var.waarde = None
-
+                if var.type == "input_register":
+                    try:
+                        response = self.comm_manager.lees_input_register(int(var.adres))
+                        if response.isError():
+                            print(f"Fout bij lezen van {var.naam} (adres {var.adres}): {response}")
+                            var.waarde = None
+                        else:
+                            var.waarde = response.registers[0]
+                    except Exception as e:
+                        print(f"Exceptie bij {var.naam}: {e}")
+                        var.waarde = None
+                if var.type == "coil":
+                    try:
+                        response = self.comm_manager.lees_coil(int(var.adres))
+                        if response.isError():
+                            print(f"Fout bij lezen van {var.naam} (adres {var.adres}): {response}")
+                            var.waarde = None
+                        else:
+                            var.waarde = response.bits[0]
+                    except Exception as e:
+                        print(f"Exceptie bij {var.naam}: {e}")
+                        var.waarde = None
+                if var.type == "discrete_input":
+                    try:
+                        response = self.comm_manager.lees_discrete_input(int(var.adres))
+                        if response.isError():
+                            print(f"Fout bij lezen van {var.naam} (adres {var.adres}): {response}")
+                            var.waarde = None
+                        else:
+                            var.waarde = response.bits[0]
+                    except Exception as e:
+                        print(f"Exceptie bij {var.naam}: {e}")
+                        var.waarde = None

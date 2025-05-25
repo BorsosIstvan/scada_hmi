@@ -2,9 +2,9 @@ from functools import partial
 
 
 class Variabele:
-    def __init__(self, naam, var_type, adres, waarde, beschrijving=""):
+    def __init__(self, naam, type, adres, waarde, beschrijving=""):
         self.naam = naam  # Unieke naam van de variabele
-        self.var_type = var_type  # "bit", "int", "float", "string", ...
+        self.type = type  # "bit", "int", "float", "string", ...
         self.adres = adres  # Bijv. "HR0", "%QX0.0", enz.
         self.waarde = waarde
         self.beschrijving = beschrijving  # Optioneel
@@ -12,7 +12,7 @@ class Variabele:
     def to_dict(self):
         return {
             "naam": self.naam,
-            "type": self.var_type,
+            "type": self.type,
             "adres": self.adres,
             "waarde": self.waarde,
             "beschrijving": self.beschrijving
@@ -22,7 +22,7 @@ class Variabele:
     def from_dict(cls, data):
         return cls(
             naam=data["naam"],
-            var_type=data["type"],
+            type=data["type"],
             adres=data["adres"],
             waarde=data["waarde"],
             beschrijving=data.get("beschrijving", "")

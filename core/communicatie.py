@@ -171,10 +171,54 @@ class CommunicatieManager:
         elif not project_context.running and self.running:
             self.stop()
 
-    def lees_register(self, adres, slave_id=1, count=1, protocol="tcp"):
+    def lees_holding_register(self, adres, slave_id=1, count=1, protocol="tcp"):
         """Voorbeeld: lees holding registers."""
         if protocol == "tcp" and self.tcp_client:
             return self.tcp_client.read_holding_registers(address=adres, count=count, slave=slave_id)
         elif protocol == "rtu" and self.rtu_client:
             return self.rtu_client.read_holding_registers(address=adres, count=count, slave=slave_id)
+        return None
+
+    def lees_input_register(self, adres, slave_id=1, count=1, protocol="tcp"):
+        """Voorbeeld: lees ir."""
+        if protocol == "tcp" and self.tcp_client:
+            return self.tcp_client.read_input_registers(address=adres, count=count, slave=slave_id)
+        elif protocol == "rtu" and self.rtu_client:
+            return self.rtu_client.read_input_registers(address=adres, count=count, slave=slave_id)
+        return None
+
+    def lees_coil(self, adres, slave_id=1, count=1, protocol="tcp"):
+        """Voorbeeld: lees co."""
+        if protocol == "tcp" and self.tcp_client:
+            return self.tcp_client.read_coils(address=adres, count=count, slave=slave_id)
+        elif protocol == "rtu" and self.rtu_client:
+            return self.rtu_client.read_coils(address=adres, count=count, slave=slave_id)
+        return None
+
+    def lees_discrete_input(self, adres, slave_id=1, count=1, protocol="tcp"):
+        """Voorbeeld: lees di."""
+        if protocol == "tcp" and self.tcp_client:
+            return self.tcp_client.read_discrete_inputs(address=adres, count=count, slave=slave_id)
+        elif protocol == "rtu" and self.rtu_client:
+            return self.rtu_client.read_discrete_inputs(address=adres, count=count, slave=slave_id)
+        return None
+
+    def schrijf_coil(self, adres, waarde, slave_id=1, protocol="tcp"):
+        """
+        Schrijf naar een coil (of meerdere coils).
+
+        waarde: True / False of een lijst van bools, zoals [True, False, True]
+        """
+        if isinstance(waarde, list):
+            # Schrijf meerdere coils
+            if protocol == "tcp" and self.tcp_client:
+                return self.tcp_client.write_coils(address=adres, values=waarde, slave=slave_id)
+            elif protocol == "rtu" and self.rtu_client:
+                return self.rtu_client.write_coils(address=adres, values=waarde, slave=slave_id)
+        else:
+            # Schrijf één coil
+            if protocol == "tcp" and self.tcp_client:
+                return self.tcp_client.write_coil(address=adres, value=waarde, slave=slave_id)
+            elif protocol == "rtu" and self.rtu_client:
+                return self.rtu_client.write_coil(address=adres, value=waarde, slave=slave_id)
         return None
